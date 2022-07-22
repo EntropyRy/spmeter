@@ -1,0 +1,16 @@
+[Unit]
+Description=Sound pressure meter
+
+[Service]
+WorkingDirectory=%h/spmeter
+ExecStart=%h/spmeter/measure.sh
+
+StandardError=journal
+
+# Discard the formatted output when running as a service
+StandardOutput=null
+
+Restart=always
+
+[Install]
+WantedBy=default.target
