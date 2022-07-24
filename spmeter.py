@@ -7,7 +7,7 @@ import numpy as np
 from scipy import signal
 #from pyfilterbank import splweighting
 
-from logger import influxdb_logger
+import logger
 
 # Number of samples for each block.
 # This determines how often a log record is made.
@@ -21,7 +21,7 @@ calib_c = 140.0
 calib_a = calib_c
 
 logfile = open("logs/log_%d" % time.time(), "a")
-logger = influxdb_logger(measurement="spl")
+logger = logger.Logger(measurement="spl")
 
 def to_dB(v):
     if v > 0: return 10.0*math.log10(v)
