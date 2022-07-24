@@ -7,6 +7,8 @@ import numpy as np
 from scipy import signal
 #from pyfilterbank import splweighting
 
+from logger import influxdb_logger
+
 # Number of samples for each block.
 # This determines how often a log record is made.
 bufsize = 48000*5
@@ -19,6 +21,7 @@ calib_c = 140.0
 calib_a = calib_c
 
 logfile = open("logs/log_%d" % time.time(), "a")
+logger = influxdb_logger(measurement="spl")
 
 def to_dB(v):
     if v > 0: return 10.0*math.log10(v)
@@ -77,6 +80,15 @@ while True:
 
     print("LAeq %5.1f  LApeak %5.1f  LAFmax \033[1;32m%5.1f\033[0m  LCeq %5.1f  LCpeak %5.1f  LCFmax \033[1;32m%5.1f\033[0m" %
     (db_mean_a, db_peak_a, db_fast_a,  db_mean_c, db_peak_c, db_fast_c))
+
+    logger.write(time1, (
+        ("LAeq",   db_mean_a),
+        ("LApeak", db_peak_a),
+        ("LAFmax", db_fast_a),
+        ("LCeq",   db_mean_c),
+        ("LCpeak", db_peak_c),
+        ("LCFmax", db_fast_c),
+    ))
 
     logfile.write("%14.2f  %5.1f %5.1f %5.1f  %5.1f %5.1f %5.1f\n" %
     (time1, db_mean_a, db_peak_a, db_fast_a,  db_mean_c, db_peak_c, db_fast_c))
