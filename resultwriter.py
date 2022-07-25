@@ -20,6 +20,8 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 import settings
 
 class InfluxdbWriter:
+    """Write results in an InfluxDB database.
+    """
     def __init__(self, measurement):
         url = settings.url
         token = settings.token
@@ -30,14 +32,42 @@ class InfluxdbWriter:
         client = InfluxDBClient(url=url, token=token, org=self.org)
         self.write_api = client.write_api(write_options=SYNCHRONOUS)
 
-    def write(self, time, fields):
+    def write(self, timestamp, fields):
         point = Point(self.measurement) \
-            .time(int(time * 1000), WritePrecision.MS)
+            .time(int(timestamp * 1000), WritePrecision.MS)
         for name, value in fields:
             point = point.field(name, value)
         self.write_api.write(self.bucket, self.org, point)
 
-# TODO: move CSV writing here to a writer class
+
+class FileWriter:
+    """Write results in a CSV-like file.
+    """
+    def __init__(self, measurement):
+        self.measurement = measurement
+        self.file = None
+
+    def write(self, timestamp, fields):
+        # Open a file if it's not open yet
+        if self.file is None:
+            self.file = open("logs/%s_%d" % (self.measurement, timestamp), "a")
+
+        self.file.write(
+            ("%14.2f  " % timestamp) +
+            (" ".join(("%5.1f" % value) for name, value in fields)) +
+            "\n"
+        )
+        self.file.flush()
+
+
+class PrintWriter:
+    """Print results to terminal.
+    """
+    def __init__(self, measurement):
+        pass
+
+    def write(self, timestamp, fields):
+        print(" ".join("%s %5.1f" % field for field in fields))
 
 
 def writer_main(measurement, writer_class, writer_queue):
@@ -47,31 +77,42 @@ def writer_main(measurement, writer_class, writer_queue):
 
     writer = writer_class(measurement)
     while True:
-        time, fields = writer_queue.get()
-        writer.write(time, fields)
+        timestamp, fields = writer_queue.get()
+        writer.write(timestamp, fields)
         writer_queue.task_done()
 
 
 class Writer:
-    def __init__(self, measurement, enable_influxdb=True):
+    def __init__(self, measurement):
         self.queues = list()
 
-        if enable_influxdb:
+        if True: # settings.enable_influxdb: TODO
             self.start_writer(measurement, InfluxdbWriter)
+        if True: # settings.enable_file: TODO
+            self.start_writer(measurement, FileWriter)
+        if True:
+            self.start_writer(measurement, PrintWriter)
 
     def start_writer(self, measurement, writer_class):
         """Start a writer thread and create a queue
         to communicate with the thread.
         """
         q = queue.Queue(maxsize=100)
+
+        # daemon=True stops the writer thread
+        # when the main measurement thread stops.
+        # This does not guarantee that all remaining data gets written,
+        # so a better approach might be sending some message in the queue
+        # to indicate the end of data.
         self.influxdb_thread = threading.Thread(
             target = writer_main,
             args = (measurement, writer_class, q),
+            daemon = True,
         )
         self.influxdb_thread.start()
         self.queues.append(q)
 
-    def write(self, time, fields):
+    def write(self, timestamp, fields):
         """Store a measurement record.
         """
         # Send the data to each writer thread through a queue.
@@ -79,6 +120,6 @@ class Writer:
         # If a queue gets full for some reason, discard the data.
         for q in self.queues:
             try:
-                q.put((time, fields), block=False)
+                q.put((timestamp, fields), block=False)
             except queue.Full:
                 pass
