@@ -1,4 +1,15 @@
 #!/usr/bin/env python3
+"""Measurement result writer.
+
+This module contains code to store measurement results.
+Results can be stored in multiple different destinations.
+
+I/O is done in a separate threads to avoid long pauses
+in the measurement thread in case the I/O takes some time.
+If writing to some destination fails, other writers can still keep working.
+For example, if connection to a database is lost, results may be still
+written to a CSV file.
+"""
 
 import queue
 import threading
@@ -8,7 +19,7 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 
 import settings
 
-class InfluxdbLogger:
+class InfluxdbWriter:
     def __init__(self, measurement):
         url = settings.url
         token = settings.token
@@ -32,12 +43,8 @@ class InfluxdbLogger:
 def writer_main(measurement, writer_class, writer_queue):
     """Main function of a thread that stores the data somewhere.
     Where the data is stored depends on the writer class given.
-
-    Data is written in a separate thread to avoid long pauses in the
-    measurement thread in case writing the data takes some time.
     """
 
-    influxdb_logger = InfluxdbLogger(measurement)
     writer = writer_class(measurement)
     while True:
         time, fields = writer_queue.get()
@@ -45,12 +52,12 @@ def writer_main(measurement, writer_class, writer_queue):
         writer_queue.task_done()
 
 
-class Logger:
+class Writer:
     def __init__(self, measurement, enable_influxdb=True):
         self.queues = list()
 
         if enable_influxdb:
-            self.start_writer(measurement, InfluxdbLogger)
+            self.start_writer(measurement, InfluxdbWriter)
 
     def start_writer(self, measurement, writer_class):
         """Start a writer thread and create a queue
