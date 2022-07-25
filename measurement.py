@@ -24,7 +24,8 @@ bufsize = 48000*5
 # Sample rate
 fs = 48000
 
-calib_c = 140.0
+# TODO: move calibration value into settings.py
+calib_c = 134.0
 
 calib_a = calib_c
 
@@ -32,7 +33,7 @@ writer = resultwriter.Writer(measurement="spl")
 
 def to_dB(v):
     if v > 0: return 10.0*math.log10(v)
-    else: return 0
+    else: return -1000.0
 
 def lowpass_ba(timeconstant, fs):
     x = math.exp(-1.0/(timeconstant*fs))
