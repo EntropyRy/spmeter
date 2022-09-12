@@ -6,13 +6,21 @@ Results can be stored in multiple different destinations.
 
 I/O is done in a separate threads to avoid long pauses
 in the measurement thread in case the I/O takes some time.
+
 If writing to some destination fails, other writers can still keep working.
 For example, if connection to a database is lost, results may be still
 written to a CSV file.
+
+The code also tries again after each failed write and keeps some amount
+of data in a queue, so that some short downtime in some connection
+should not cause any loss of data.
 """
 
 import queue
+import sys
 import threading
+import time
+import traceback
 
 from influxdb_client import InfluxDBClient, Point, WritePrecision
 from influxdb_client.client.write_api import SYNCHRONOUS
@@ -75,11 +83,37 @@ def writer_main(measurement, writer_class, writer_queue):
     Where the data is stored depends on the writer class given.
     """
 
+    # TODO: handle failed init as well?
     writer = writer_class(measurement)
     while True:
         timestamp, fields = writer_queue.get()
-        writer.write(timestamp, fields)
-        writer_queue.task_done()
+        exctype_prev = None
+        while True:
+            try:
+                writer.write(timestamp, fields)
+            except Exception as exc:
+                # Write failed.
+                # Try again after some time.
+                # Also print the error, but don't print it again
+                # if it's the same as last time.
+
+                exctype = type(exc)
+                if exctype is not exctype_prev:
+                    print(type(writer), "failed:", file=sys.stderr)
+                    traceback.print_exc()
+                    print("----", file=sys.stderr)
+                exctype_prev = exctype
+
+                time.sleep(10)
+            else:
+                # Write was success
+                writer_queue.task_done()
+
+                # If it previously failed, tell that it's working again
+                if exctype_prev is not None:
+                    print(type(writer), "works again", file=sys.stderr)
+
+                break
 
 
 class Writer:
